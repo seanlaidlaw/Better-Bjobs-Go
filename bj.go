@@ -2,13 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"os/exec"
-	"time"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
 	"strconv"
+	"time"
 
 	ui "github.com/gizak/termui"
 	"github.com/gizak/termui/widgets"
@@ -29,59 +29,91 @@ type recStruct struct {
 	EXIT_CODE string
 	}
 
-type bjobsStruct struct {
-	COMMAND string
-	JOBS int
-	RECORDS []recStruct
+
+
+func run_bjobs() map[string]recStruct {
+	var bjobs_cmd *exec.Cmd
+
+	//if projectBool {
+		//bjobs_cmd = exec.Command("bjobs","-Jd",proj_name,"-a","-json","-o","jobid stat queue kill_reason dependency exit_reason time_left %complete run_time max_mem memlimit nthreads exit_code")
+	//} else {
+		//bjobs_cmd = exec.Command("bjobs","-a","-json","-o","jobid stat queue kill_reason dependency exit_reason time_left %complete run_time max_mem memlimit nthreads exit_code")
+	//}
+	bjobs_cmd = exec.Command("cat","example.json")
+
+	// 1. fetch current bjobs from shell
+	bjobsJson, err := bjobs_cmd.Output()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1) // if problem with bjobs command then stop here
+	}
+
+	// 2. get 'RECORDS' part of JSON
+	bjobs_json_raw := make(map[string]json.RawMessage)
+	json.Unmarshal([]byte(bjobsJson), &bjobs_json_raw)
+	bjobs_recs := bjobs_json_raw["RECORDS"]
+
+	// 2. parse records into a list of bjob structures
+	var bjList []recStruct
+	json.Unmarshal([]byte(bjobs_recs), &bjList)
+
+	// 3. convert list of records to map for easy lookup by JOBID
+	bj_map := make(map[string]recStruct)
+	for _, bj := range bjList {
+		bj_map[bj.JOBID] = bj
+	}
+
+
+	return bj_map
 }
 
-type jobLog struct {
-	NOTIFY bool
-	IDS []string
-	LENGTH int
-	BJOBS []recStruct
-}
-
-
-func writeDatabase(usr_home string, usr_config string, db jobLog) {
+func writeDatabase(usr_home string, usr_config string, db map[string]recStruct) {
 	os.MkdirAll(usr_home, 0755)
-	b, _ := json.Marshal(db)
+	b, err := json.Marshal(db)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 	ioutil.WriteFile(usr_config, b, 0644)
 }
 
 
-func stringInSlice(a string, list []string) bool {
-    for _, b := range list {
-        if b == a {
-            return true
-        }
-    }
-    return false
-}
-
-func readSavedDatabase(usr_config string) jobLog {
-
-	var savedDatabase jobLog
+func readSavedDatabase(usr_config string) map[string]recStruct{
+	var db map[string]recStruct
 	if _, err := os.Stat(usr_config); ! os.IsNotExist(err) {
 		savedDatabaseJson, _ := ioutil.ReadFile(usr_config)
 
-		json.Unmarshal([]byte(savedDatabaseJson), &savedDatabase)
+		json.Unmarshal([]byte(savedDatabaseJson), &db)
 	}
-	return savedDatabase
+
+	return db
 }
 
-func updateDatabase(currentDB *jobLog, BJob *bjobsStruct) {
 
-	for i:=0; i < BJob.JOBS; i++ {
-		if ! stringInSlice(BJob.RECORDS[i].JOBID ,currentDB.IDS) {
-			currentDB.BJOBS = append(currentDB.BJOBS, BJob.RECORDS[i])
-			currentDB.IDS = append(currentDB.IDS, BJob.RECORDS[i].JOBID)
-			currentDB.LENGTH = currentDB.LENGTH+1
+func updateDatabase(db map[string]recStruct, bjobs_map map[string]recStruct) {
+	// get list of jobids whose data needs udpating
+	updateList := make([]string, len(bjobs_map))
+	i := 0
+	for id, new_job := range bjobs_map {
+		// when no entry exists for new job id add it to list
+		if _, ok := db[id]; !ok {
+			updateList[i] = id
+		} else {
+			// check if jobs are identical
+			if (new_job != db[id]) {
+				updateList[i] = id
+			}
+		}
+		i++
+	}
+
+	for i := 0; i < len(updateList); i++ {
+		if (updateList[i] != "") {
+			db[updateList[i]] = bjobs_map[updateList[i]]
 		}
 	}
 
 }
-
 
 
 func main() {
@@ -91,32 +123,29 @@ func main() {
 
 	// initiate default values to be later changed by different user interactions
 	projectBool := false
+	proj_name := ""
 	kill_menu := false
 	email_on := false
 
-	bjobs_cmd := exec.Command("bjobs","-a","-json","-o","jobid stat queue kill_reason dependency exit_reason time_left %complete run_time max_mem memlimit nthreads exit_code")
-	bjobsJson, err := bjobs_cmd.Output()
-
-	// if problem with bjobs then stop here
-	if err != nil {
-		fmt.Println(err)
+	if len(os.Args) > 2 {
+	fmt.Println("Error more than one argument passed, give zero arguments to select all bjobs or one argument to specify a specific project name")
 		os.Exit(1)
+	} else if len(os.Args) == 2 {
+		proj_name = os.Args[1]
+		projectBool = true
 	}
 
 
-	//unmarshal (parse) json into struct
-	var bjobs bjobsStruct
-	json.Unmarshal([]byte(bjobsJson), &bjobs)
 
+	// fetch and parse output from bjobs command
+	bjobs_map := run_bjobs()
 
 	// load config with previous session data
 	db := readSavedDatabase(usr_config)
-	if db.LENGTH > 0 {
-		//fmt.Println(db)
-		updateDatabase(&db, &bjobs)
+	if len(db) > 0 {
+		updateDatabase(db, bjobs_map)
 	} else {
-		db.LENGTH = bjobs.JOBS
-		db.BJOBS = bjobs.RECORDS
+		db = bjobs_map
 	}
 
 	// start curses terminal interface
@@ -127,7 +156,6 @@ func main() {
 
 	// get dimensions of current terminal window
 	termWidth, termHeight := ui.TerminalDimensions()
-
 
 
 	// Setup the main table with columns for bjobs
@@ -147,9 +175,8 @@ func main() {
 	exit_jobs := 0
 
 	// add job info to rows
-	for i:=0; i < db.LENGTH; i++ {
-		bjob := db.BJOBS[i]
-
+	i:=0
+	for _, bjob := range db {
 		switch bjob.STAT {
 		case "PEND":
 			pend_jobs++
@@ -167,9 +194,9 @@ func main() {
 			table1.RowStyles[(i+1)] = ui.NewStyle(ui.ColorClear, ui.ColorClear)
 		}
 
+		i++
 	}
 	ui.Render(table1) // display constructed table
-
 
 
 	// set job counts / statistics line
@@ -177,6 +204,8 @@ func main() {
 	stats_grid.SetRect(0, termHeight-3, termWidth, termHeight-2)
 	run_jobs_p := widgets.NewParagraph()
 	run_jobs_p.Text = "Running: " + strconv.Itoa(run_jobs)
+	//randgen := rand.New(rand.NewSource(time.Now().UnixNano()))
+	//run_jobs_p.Text = "Running: " + strconv.Itoa(randgen.Intn(200))
 	run_jobs_p.Border = false
 	pend_jobs_p := widgets.NewParagraph()
 	pend_jobs_p.Text = "Pending: " + strconv.Itoa(pend_jobs)
@@ -270,7 +299,7 @@ func main() {
 				ui.Render(button_grid)
 
 				// replace savedDatabase with an empty one on pressing clear
-				var emptyDB jobLog
+				var emptyDB map[string]recStruct
 				writeDatabase(usr_home, usr_config, emptyDB)
 				ui.Render(table1)
 
@@ -297,7 +326,7 @@ func main() {
 				// specify that only project ids will be killed if we have a project subview
 				projectText := ""
 				if projectBool {
-					projectText = " for this project"
+					projectText = " for project " + proj_name
 				}
 
 				kill_menu = true
@@ -319,11 +348,11 @@ func main() {
 			case "y":
 				if kill_menu {
 					// if we say yes to all-kill menu then alert user
-					statusline.Text = "KILLING ALL BJOBS.."
+					statusline.Text = "Killing all bjobs"
 					ui.Render(statusline_grid)
 
-					for jobnb:=0; jobnb < len(db.IDS); jobnb++ {
-						_, err := exec.Command("bkill", db.IDS[jobnb]).Output()
+					for jobid, _ := range db {
+						_, err := exec.Command("bkill", jobid).Output()
 						if err != nil {
 							fmt.Println(err)
 							os.Exit(1)
