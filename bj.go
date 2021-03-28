@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math/rand"
 	"os"
 	"os/exec"
 	"sort"
@@ -168,14 +167,12 @@ func updateDatabase(db map[string]recStruct, bjobs_map map[string]recStruct) map
 }
 
 // set job counts / statistics line
-func statsGrid(pend_jobs int, done_jobs int, exit_jobs int) {
+func statsGrid(run_jobs int, pend_jobs int, done_jobs int, exit_jobs int) {
 	stats_grid := ui.NewGrid()
 	termWidth, termHeight := ui.TerminalDimensions()
 	stats_grid.SetRect(0, termHeight-3, termWidth, termHeight-2)
 	run_jobs_p := widgets.NewParagraph()
-	//run_jobs_p.Text = "Running: " + strconv.Itoa(run_jobs)
-	randgen := rand.New(rand.NewSource(time.Now().UnixNano()))
-	run_jobs_p.Text = "Running: " + strconv.Itoa(randgen.Intn(200))
+	run_jobs_p.Text = "Running: " + strconv.Itoa(run_jobs)
 	run_jobs_p.Border = false
 	pend_jobs_p := widgets.NewParagraph()
 	pend_jobs_p.Text = "Pending: " + strconv.Itoa(pend_jobs)
@@ -195,17 +192,10 @@ func statsGrid(pend_jobs int, done_jobs int, exit_jobs int) {
 	ui.Render(stats_grid)
 }
 
-func refreshInterface(db map[string]recStruct,table2 **widgets.Table) {
-	table1 := widgets.NewTable()
-	termWidth, termHeight := ui.TerminalDimensions()
-	table1.SetRect(0, 0, termWidth, termHeight-3)
-	table1.TextAlignment = ui.AlignCenter
-	table1.RowSeparator = false
+func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 
-	// set table headers
-	table1.Rows = [][]string{[]string{"JOB ID", "STATUS", "QUEUE", "RAM USAGE", "%Time Limit"}}
-	table1.RowStyles[0] = ui.NewStyle(ui.ColorYellow, ui.ColorClear, ui.ModifierBold)
-
+	// remove all rows in table but header, as we are going to populate with newly updated rows
+	(*job_table).Rows = (*job_table).Rows[:1]
 
 	// fetch and parse output from bjobs command
 	bjobs_map := run_bjobs()
@@ -246,9 +236,9 @@ func refreshInterface(db map[string]recStruct,table2 **widgets.Table) {
 		job := db[id]
 		completion_perc, _ := strconv.Atoi(strings.Replace(job.COMPLETE, "% L","",1))
 		if completion_perc > 95 {
-			table1 = danger_alert(table1, db, id, "nearly at time limit")
+			(*job_table) = danger_alert((*job_table), db, id, "nearly at time limit")
 		} else if job.atmemlimit() {
-			table1 = danger_alert(table1, db, id, "at memory limit")
+			(*job_table) = danger_alert((*job_table), db, id, "at memory limit")
 		} else {
 			remaining_run_jobs_list = append(remaining_run_jobs_list, id)
 		}
@@ -256,22 +246,22 @@ func refreshInterface(db map[string]recStruct,table2 **widgets.Table) {
 	sort.Strings(remaining_run_jobs_list)
 
 	for _, id := range remaining_run_jobs_list {
-		table1.Rows = append(table1.Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage(), strings.Replace(db[id].COMPLETE, " L","",1)})
-		table1.RowStyles[(len(table1.Rows)-1)] = ui.NewStyle(ui.Color(248), ui.ColorClear)
+		(*job_table).Rows = append((*job_table).Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage(), strings.Replace(db[id].COMPLETE, " L","",1)})
+		(*job_table).RowStyles[(len((*job_table).Rows)-1)] = ui.NewStyle(ui.Color(248), ui.ColorClear)
 	}
 	for _, id := range exit_jobs_list {
-		table1.Rows = append(table1.Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage(), db[id].EXIT_REASON})
-		table1.RowStyles[(len(table1.Rows)-1)] = ui.NewStyle(ui.ColorRed, ui.ColorClear)
+		(*job_table).Rows = append((*job_table).Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage(), db[id].EXIT_REASON})
+		(*job_table).RowStyles[(len((*job_table).Rows)-1)] = ui.NewStyle(ui.ColorRed, ui.ColorClear)
 	}
 	for _, id := range done_jobs_list {
-		table1.Rows = append(table1.Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage()})
-		table1.RowStyles[(len(table1.Rows)-1)] = ui.NewStyle(ui.ColorGreen, ui.ColorClear)
+		(*job_table).Rows = append((*job_table).Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage()})
+		(*job_table).RowStyles[(len((*job_table).Rows)-1)] = ui.NewStyle(ui.ColorGreen, ui.ColorClear)
 	}
 
 
 
-	statsGrid(pend_jobs, done_jobs, exit_jobs)
-	ui.Render(table1) // display constructed table
+	statsGrid(run_jobs, pend_jobs, done_jobs, exit_jobs)
+	ui.Render(*job_table) // display constructed table
 }
 
 
@@ -409,8 +399,7 @@ func main() {
 				// replace savedDatabase with an empty one on pressing clear
 				var emptyDB map[string]recStruct
 				writeDatabase(usr_home, usr_config, emptyDB)
-				//ui.Render(table1)
-				//refreshInterface(db)
+				refreshInterface(db, &job_table)
 
 				// pause long enough for user to see whats happening
 				time.Sleep(1 * time.Second)
@@ -421,13 +410,12 @@ func main() {
 
 
 			// re-render all elements on resizing terminal window
-			//case "<Resize>":
-				//payload := e.Payload.(ui.Resize)
-				//table1.SetRect(0, 0, payload.Width, payload.Height)
-				//ui.Clear()
-				//ui.Render(table1)
-				//ui.Render(button_grid)
-				//refreshInterface(db)
+			case "<Resize>":
+				payload := e.Payload.(ui.Resize)
+				job_table.SetRect(0, 0, payload.Width, payload.Height)
+				ui.Clear()
+				ui.Render(button_grid)
+				refreshInterface(db, &job_table)
 
 
 			// loop over all cached bjob ids killing each one on "k"
