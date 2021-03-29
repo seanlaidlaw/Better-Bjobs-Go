@@ -330,7 +330,6 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 
 	if email_on {
 		if ((run_jobs == 0) && ((exit_jobs != 0) || (done_jobs == 0))) {
-fmt.Println("sending notification")
 			send_notification_email(projectBool, proj_name)
 			ui.Render(button_grid)
 		}
@@ -507,11 +506,11 @@ func main() {
 
 					kill_menu = true
 					statusline.TextStyle.Fg = ui.ColorRed
-					async_statusline_message("Are you sure you want to kill all unfinished bjobs"+projectText+"? [Yn] ", 2)
+					async_statusline_message("Are you sure you want to kill all unfinished bjobs"+projectText+"? [Yn] ", 5)
 
 				} else {
 					statusline.TextStyle.Fg = ui.ColorRed
-					async_statusline_message("Error: " + "no currently running jobs", 2)
+					async_statusline_message("Error: " + "no currently running jobs", 5)
 
 					statusline.Text = "Error: " + "no currently running jobs"
 					ui.Render(statusline_grid)
