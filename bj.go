@@ -310,8 +310,8 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 	sort.Strings(all_run_jobs_list)
 	for _, id := range all_run_jobs_list {
 		job := db[id]
-		completion_perc, _ := strconv.Atoi(strings.Replace(job.COMPLETE, "% L","",1))
-		if completion_perc > 95 {
+		completion_perc,_ := strconv.ParseFloat(strings.Replace(job.COMPLETE, "% L", "", 1), 64)
+		if (completion_perc >= 95.0) {
 			(*job_table) = danger_alert((*job_table), db, id, "nearly at time limit")
 		} else if job.atmemlimit() {
 			(*job_table) = danger_alert((*job_table), db, id, "at memory limit")
