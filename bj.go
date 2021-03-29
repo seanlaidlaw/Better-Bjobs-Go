@@ -15,6 +15,26 @@ import (
 	ui "github.com/gizak/termui"
 	"github.com/gizak/termui/widgets"
 )
+
+// initialise variables that need to be global
+var email_on bool
+var projectBool bool
+var proj_name string
+var pend_jobs int
+var run_jobs int
+var done_jobs int
+var exit_jobs int
+
+// initialise the two buttons that need to be global variables
+// (their appearence needs to be modified from inside functions)
+var email_btn *widgets.Paragraph
+var killall_btn *widgets.Paragraph
+
+var button_grid *ui.Grid
+var statusline_grid *ui.Grid
+var statusline *widgets.Paragraph
+
+
 type recStruct struct {
 	JOBID string
 	STAT string
@@ -31,35 +51,36 @@ type recStruct struct {
 	EXIT_CODE string
 	}
 
-	func (rec recStruct) mem_usage()  string {
-		max_mem := rec.MAX_MEM
-		memlimit := rec.MEMLIMIT
-		memusage := ""
-        if max_mem != "" {
-            max_mem = parse_bytes_output(max_mem)
-            memlimit = parse_bytes_output(memlimit)
-			memusage = max_mem + "/" + memlimit
-		}
-		return memusage
+func (rec recStruct) mem_usage()  string {
+	max_mem := rec.MAX_MEM
+	memlimit := rec.MEMLIMIT
+	memusage := ""
+	if max_mem != "" {
+		max_mem = parse_bytes_output(max_mem)
+		memlimit = parse_bytes_output(memlimit)
+		memusage = max_mem + "/" + memlimit
 	}
+	return memusage
+}
 
-	func (rec recStruct) atmemlimit() bool {
-		max_mem_str := rec.MAX_MEM
-		memlimit_str := rec.MEMLIMIT
-		atlimit := false
-		if max_mem_str != "" {
-			max_mem_str = parse_bytes_output(max_mem_str)
-			max_mem := parse_human_sizes(max_mem_str)
+func (rec recStruct) atmemlimit() bool {
+	max_mem_str := rec.MAX_MEM
+	memlimit_str := rec.MEMLIMIT
+	atlimit := false
+	if max_mem_str != "" {
+		max_mem_str = parse_bytes_output(max_mem_str)
+		max_mem := parse_human_sizes(max_mem_str)
 
-			memlimit_str = parse_bytes_output(memlimit_str)
-			memlimit := parse_human_sizes(memlimit_str)
+		memlimit_str = parse_bytes_output(memlimit_str)
+		memlimit := parse_human_sizes(memlimit_str)
 
-			if max_mem/memlimit > 0.9 {
-				atlimit = true
-			}
+		if max_mem/memlimit > 0.9 {
+			atlimit = true
 		}
-		return atlimit
 	}
+	return atlimit
+}
+
 
 
 func parse_bytes_output(bytes_string string) string {
@@ -81,15 +102,45 @@ func parse_human_sizes(human_size_str string) float64 {
 	return machine_readable_size
 }
 
+func send_notification_email(projectBool bool, proj_name string) {
+	email_subject := "[BJ] Bjobs ended"
+	if projectBool{
+		email_subject = email_subject + " for project " + proj_name
+	}
+
+	// command to generate the multiline email body
+	email_body := exec.Command("printf", "\n\nThis is an automated message on bjobs ending")
+
+	// command to send email
+	email_adrr := os.Getenv("USER") + "@sanger.ac.uk"
+	email_cmd := exec.Command("mailx", "-s", email_subject, email_adrr)
+
+	// pipe the email body to the send email command
+	email_cmd.Stdin, _ = email_body.StdoutPipe()
+
+	// start the email command, wait until finish pipe the email body, and run email_cmd
+	_ = email_cmd.Start()
+	_ = email_body.Run()
+	err := email_cmd.Wait()
+
+	if err != nil {
+		statusline.Text = "Error: " + err.Error()
+		ui.Render(statusline_grid)
+	}
+	email_btn.TextStyle.Fg = ui.Color(248)
+	email_btn.Text = "Email On All Ending [e] "
+	email_on = !(email_on)
+}
+
 func run_bjobs() map[string]recStruct {
 	var bjobs_cmd *exec.Cmd
 
-	//if projectBool {
-		//bjobs_cmd = exec.Command("bjobs","-Jd",proj_name,"-a","-json","-o","jobid stat queue kill_reason dependency exit_reason time_left %complete run_time max_mem memlimit nthreads exit_code")
-	//} else {
-		//bjobs_cmd = exec.Command("bjobs","-a","-json","-o","jobid stat queue kill_reason dependency exit_reason time_left %complete run_time max_mem memlimit nthreads exit_code")
-	//}
-	bjobs_cmd = exec.Command("cat","example.json")
+	if projectBool {
+		bjobs_cmd = exec.Command("bjobs","-Jd",proj_name,"-a","-json","-o","jobid stat queue kill_reason dependency exit_reason time_left %complete run_time max_mem memlimit nthreads exit_code")
+	} else {
+		bjobs_cmd = exec.Command("bjobs","-a","-json","-o","jobid stat queue kill_reason dependency exit_reason time_left %complete run_time max_mem memlimit nthreads exit_code")
+	}
+	//bjobs_cmd = exec.Command("cat","example.json")
 
 	// 1. fetch current bjobs from shell
 	bjobsJson, err := bjobs_cmd.Output()
@@ -121,19 +172,22 @@ func writeDatabase(usr_home string, usr_config string, db map[string]recStruct) 
 	os.MkdirAll(usr_home, 0755)
 	b, err := json.Marshal(db)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		statusline.Text = "Error in writing cache on exit: " + err.Error()
+		ui.Render(statusline_grid)
 	}
 	ioutil.WriteFile(usr_config, b, 0644)
 }
 
 
 func readSavedDatabase(usr_config string) map[string]recStruct{
-	var db map[string]recStruct
+	db := make(map[string]recStruct)
 	if _, err := os.Stat(usr_config); ! os.IsNotExist(err) {
 		savedDatabaseJson, _ := ioutil.ReadFile(usr_config)
 
 		json.Unmarshal([]byte(savedDatabaseJson), &db)
+	} else if err != nil {
+		statusline.Text = "Error in reading job cache: " + err.Error()
+		ui.Render(statusline_grid)
 	}
 
 	return db
@@ -208,10 +262,10 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 	var exit_jobs_list []string
 	var done_jobs_list []string
 	var remaining_run_jobs_list []string
-	pend_jobs := 0
-	run_jobs := 0
-	done_jobs := 0
-	exit_jobs := 0
+	pend_jobs = 0
+	run_jobs = 0
+	done_jobs = 0
+	exit_jobs = 0
 	// add job info to rows
 	for _, bjob := range db {
 		switch bjob.STAT {
@@ -259,6 +313,21 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 	}
 
 
+	if email_on {
+		if ((run_jobs == 0) && ((exit_jobs != 0) || (done_jobs == 0))) {
+fmt.Println("sending notification")
+			send_notification_email(projectBool, proj_name)
+		}
+	}
+
+	if email_on {
+		email_btn.TextStyle.Fg = ui.ColorGreen
+		email_btn.Text = "Email notification on"
+	} else {
+		email_btn.TextStyle.Fg = ui.Color(248)
+		email_btn.Text = "Email On All Ending [e] "
+	}
+	ui.Render(button_grid)
 
 	statsGrid(run_jobs, pend_jobs, done_jobs, exit_jobs)
 	ui.Render(*job_table) // display constructed table
@@ -272,19 +341,12 @@ func danger_alert(table1 *widgets.Table, db map[string]recStruct, id string, ale
 }
 
 
-
 func main() {
 	// initiate default values to be later changed by different user interactions
-	projectBool := false
-	proj_name := ""
+	projectBool = false
+	proj_name = ""
 	kill_menu := false
-	email_on := false
-
-	// load config and cached job information
-	usr_home, _ := os.UserHomeDir()
-	usr_home = usr_home + "/.config/better-bjobs/"
-	usr_config := usr_home + "savedDatabase.json"
-
+	email_on = false
 
 	if len(os.Args) > 2 {
 	fmt.Println("Error more than one argument passed, give zero arguments to select all bjobs or one argument to specify a specific project name")
@@ -293,6 +355,14 @@ func main() {
 		proj_name = os.Args[1]
 		projectBool = true
 	}
+
+
+	// load config and cached job information
+	usr_home, _ := os.UserHomeDir()
+	usr_home = usr_home + "/.config/better-bjobs/"
+	usr_config := usr_home + proj_name + "savedDatabase.json"
+
+
 
 	// start curses terminal interface
 	if err := ui.Init(); err != nil {
@@ -304,24 +374,22 @@ func main() {
 	termWidth, termHeight := ui.TerminalDimensions()
 
 
+	// set statusline to be same location as buttons
+	// so as to hide the buttons when we display a status
+	statusline_grid = ui.NewGrid()
+	statusline = widgets.NewParagraph()
+	statusline_grid.SetRect(0, termHeight-2, termWidth, termHeight+1)
+	statusline.Border = false
+	statusline_grid.Set(ui.NewRow(1.0/1.0, statusline))
+
 
 	// load config with previous session data
 	db := readSavedDatabase(usr_config)
 
 
-
-	// set statusline to be same location as buttons
-	// so as to hide the buttons when we display a status
-	statusline_grid := ui.NewGrid()
-	statusline_grid.SetRect(0, termHeight-2, termWidth, termHeight+1)
-	statusline := widgets.NewParagraph()
-	statusline.Border = false
-	statusline_grid.Set(ui.NewRow(1.0/1.0, statusline))
-
-
 	// Make grid layout for the buttons
 	// on the bottom of the screen
-	button_grid := ui.NewGrid()
+	button_grid = ui.NewGrid()
 	button_grid.SetRect(0, termHeight-2, termWidth, termHeight+1)
 
 	quit_btn := widgets.NewParagraph()
@@ -329,12 +397,12 @@ func main() {
 	quit_btn.Border = false
 	quit_btn.TextStyle.Fg = ui.Color(248)
 
-	email_btn := widgets.NewParagraph()
+	email_btn = widgets.NewParagraph()
 	email_btn.Text = "Email On All Ending [e] "
 	email_btn.Border = false
 	email_btn.TextStyle.Fg = ui.Color(248)
 
-	killall_btn := widgets.NewParagraph()
+	killall_btn = widgets.NewParagraph()
 	killall_btn.Text = "Kill All Jobs [k] "
 	killall_btn.Border = false
 	killall_btn.TextStyle.Fg = ui.Color(248)
@@ -378,17 +446,23 @@ func main() {
 			writeDatabase(usr_home, usr_config, db)
 				return
 
-			// TODO: fix this to actually send email on completion
 			case "e":
-				email_on = !(email_on)
-				if email_on {
-					email_btn.TextStyle.Fg = ui.ColorGreen
-					email_btn.Text = "Email notification scheduled"
+				if run_jobs > 0 {
+					email_on = !(email_on)
+					if email_on {
+						email_btn.TextStyle.Fg = ui.ColorGreen
+						email_btn.Text = "Email notification on"
+					} else {
+						email_btn.TextStyle.Fg = ui.Color(248)
+						email_btn.Text = "Email On All Ending [e] "
+					}
+					ui.Render(button_grid)
 				} else {
-					email_btn.TextStyle.Fg = ui.ColorClear
-					email_btn.Text = "Email On All Ending [e] "
+					statusline.Text = "Error: " + "no currently running jobs"
+					ui.Render(statusline_grid)
+					time.Sleep(2 * time.Second)
+					ui.Render(button_grid)
 				}
-				ui.Render(button_grid)
 
 			// clear the cache of saved jobs
 			case "c", "<C-l>":
@@ -402,9 +476,9 @@ func main() {
 				refreshInterface(db, &job_table)
 
 				// pause long enough for user to see whats happening
-				time.Sleep(1 * time.Second)
+				time.Sleep(2 * time.Second)
 
-				clear_btn.TextStyle.Fg = ui.ColorClear
+				clear_btn.TextStyle.Fg = ui.Color(248)
 				clear_btn.Text = "Clear Job Cache [c] "
 				ui.Render(button_grid)
 
@@ -420,24 +494,31 @@ func main() {
 
 			// loop over all cached bjob ids killing each one on "k"
 			case "k":
-				// specify that only project ids will be killed if we have a project subview
-				projectText := ""
-				if projectBool {
-					projectText = " for project " + proj_name
+				if run_jobs > 0 {
+					// specify that only project ids will be killed if we have a project subview
+					projectText := ""
+					if projectBool {
+						projectText = " for project " + proj_name
+					}
+
+					kill_menu = true
+					statusline.Text = "Are you sure you want to kill all unfinished bjobs"+projectText+"? [Yn] "
+					statusline.TextStyle.Fg = ui.ColorRed
+
+					ui.Render(statusline_grid)
+					} else {
+					statusline.Text = "Error: " + "no currently running jobs"
+					ui.Render(statusline_grid)
+					time.Sleep(2 * time.Second)
+					ui.Render(button_grid)
 				}
-
-				kill_menu = true
-				statusline.Text = "Are you sure you want to kill all unfinished bjobs"+projectText+"? [Yn] "
-				statusline.TextStyle.Fg = ui.ColorRed
-
-				ui.Render(statusline_grid)
 
 
 			// manage yes and no prompts initiated by other cases
 			case "n":
 				if kill_menu {
 					// if we say no to all-kill menu then reset statusline and put back buttons
-					statusline.TextStyle.Fg = ui.ColorClear
+					statusline.TextStyle.Fg = ui.Color(248)
 					statusline.Text = ""
 					ui.Render(button_grid)
 				}
@@ -445,18 +526,22 @@ func main() {
 			case "y":
 				if kill_menu {
 					// if we say yes to all-kill menu then alert user
-					statusline.Text = "Killing all bjobs"
+					statusline.Text = "Killing all bjobs, this might take a minute"
 					ui.Render(statusline_grid)
 
 					for jobid, _ := range db {
-						_, err := exec.Command("bkill", jobid).Output()
+						cmd := exec.Command("bkill", jobid)
+						_, err := cmd.Output()
 						if err != nil {
-							fmt.Println(err)
-							os.Exit(1)
+							statusline.Text = "Error: " + err.Error()
+							ui.Render(statusline_grid)
 						}
 					}
 
-					killall_btn.TextStyle.Fg = ui.ColorClear
+					// pause long enough for user to see whats happening
+					time.Sleep(5 * time.Second)
+
+					killall_btn.TextStyle.Fg = ui.Color(248)
 					ui.Render(button_grid)
 				}
 
