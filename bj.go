@@ -536,11 +536,6 @@ func main() {
 				} else {
 					statusline.TextStyle.Fg = ui.ColorRed
 					async_statusline_message("Error: " + "no currently running jobs", 5)
-
-					statusline.Text = "Error: " + "no currently running jobs"
-					ui.Render(statusline_grid)
-					time.Sleep(2 * time.Second)
-					ui.Render(button_grid)
 				}
 
 
