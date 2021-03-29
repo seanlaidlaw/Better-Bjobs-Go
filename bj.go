@@ -30,6 +30,9 @@ var exit_jobs int
 var email_btn *widgets.Paragraph
 var killall_btn *widgets.Paragraph
 
+// initialise project label
+var project_name_label *widgets.Paragraph
+
 var button_grid *ui.Grid
 var statusline_grid *ui.Grid
 var statusline *widgets.Paragraph
@@ -343,8 +346,13 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 		email_btn.Text = "Email On All Ending [e] "
 	}
 
+
 	statsGrid(run_jobs, pend_jobs, done_jobs, exit_jobs)
 	ui.Render(*job_table) // display constructed table
+	// if project then show label on refresh screen
+	if projectBool {
+		ui.Render(project_name_label)
+	}
 }
 
 
@@ -386,6 +394,23 @@ func main() {
 
 	// get dimensions of current terminal window
 	termWidth, termHeight := ui.TerminalDimensions()
+
+	// setup project label
+	project_name_label = widgets.NewParagraph()
+
+	if projectBool {
+		proj_name_rune := []rune(proj_name)
+		proj_n_len := len(proj_name_rune)
+		if proj_n_len > 20 {
+			proj_name_rune = proj_name_rune[0:20]
+			proj_name = string(proj_name_rune[0:20])
+			proj_n_len = len([]rune(proj_name_rune))
+		}
+		project_name_label.Text = proj_name
+		project_name_label.TextStyle.Fg = ui.ColorBlue
+		project_name_label.SetRect((termWidth-proj_n_len-2), termHeight-6, termWidth+1, termHeight-3)
+	}
+
 
 
 	// set statusline to be same location as buttons
@@ -436,7 +461,7 @@ func main() {
 
 
 	job_table := widgets.NewTable()
-	job_table.SetRect(0, 0, termWidth, termHeight-3)
+	job_table.SetRect(0-1, 0, termWidth+1, termHeight-3)
 	job_table.TextAlignment = ui.AlignCenter
 	job_table.RowSeparator = false
 
