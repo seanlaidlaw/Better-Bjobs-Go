@@ -23,6 +23,18 @@ succeeded and how many exited
 - See jobs that are no longer visible with `bjobs -a` thanks to job caching on
 exiting interface
 
+## Screenshots
+
+View of Better-Bjobs interface with buttons at bottom, and color-highlighted example jobs
+
+![View of Better-Bjobs interface with example jobs](img/sch-normal.svg)
+
+
+When a job approches its memory or time limit it is highlighted in red and brought to the top for attention
+
+![View of better-bjobs interface with alert indicating a job approaching time limit](img/sch-normal-alert.svg)
+
+
 ## Usage
 
 If `bj` is in the `PATH`, then it can be run with the `bj` command
@@ -35,7 +47,7 @@ name of the project as an argument to the `bj` command.
 for example to show all bjobs related to the _fq compression_ project:
 
 ```{bash}
-bj "fq compression"`
+bj "fq compression"
 ```
 
 To set a project name when launching the jobs specify the project name as the
