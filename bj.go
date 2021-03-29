@@ -112,7 +112,11 @@ func send_notification_email(projectBool bool, proj_name string) {
 	}
 
 	// command to generate the multiline email body
-	email_body := exec.Command("printf", "\n\nThis is an automated message on bjobs ending")
+	count_jobs := exit_jobs + done_jobs
+	var body_text string
+	body_text = "Hello human\n\nOut of a total of " + strconv.Itoa(count_jobs) + " jobs, " + strconv.Itoa(exit_jobs) + " exited, and " + strconv.Itoa(done_jobs) + " finished succesfully"
+	body_text = body_text + "\n\nThis is an automated message on bjobs ending, to raise an issue please visit the github respository 'seanlaidlaw/Better-Bjobs-Go'"
+	email_body := exec.Command("printf", body_text)
 
 	// command to send email
 	email_adrr := os.Getenv("USER") + "@sanger.ac.uk"
