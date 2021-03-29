@@ -23,6 +23,24 @@ succeeded and how many exited
 - See jobs that are no longer visible with `bjobs -a` thanks to job caching on
 exiting interface
 
+## Usage
+
+If `bj` is in the `PATH`, then it can be run with the `bj` command
+in a spare terminal window or tmux pane.
+This will show all non-pending jobs for the user.
+
+To show only jobs from a certain project (the most useful use-case) add the
+name of the project as an argument to the `bj` command.
+
+for example to show all bjobs related to the _fq compression_ project:
+
+```{bash}
+bj "fq compression"`
+```
+
+To set a project name when launching the jobs specify the project name as the
+`-Jd` argument for the `bsub` relative to that project.
+
 ## Installation
 
 ### Binary Release
