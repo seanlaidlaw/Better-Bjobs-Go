@@ -132,6 +132,21 @@ func send_notification_email(projectBool bool, proj_name string) {
 	email_on = !(email_on)
 }
 
+
+func async_statusline_message(text string, time_ms int) {
+	// use goroutine to asynchronously display message and wait
+	// without blocking rest of interface
+	go func(text string, time_ms int) {
+		statusline.Text = text
+		ui.Render(statusline_grid)
+		time.Sleep(time.Duration(time_ms) * time.Second)
+
+	ui.Render(button_grid)
+	statusline.TextStyle.Fg = ui.Color(248) // reset statusline defafults
+	statusline.TextStyle.Bg = ui.ColorClear
+	}(text, time_ms)
+}
+
 func run_bjobs() map[string]recStruct {
 	var bjobs_cmd *exec.Cmd
 
@@ -317,6 +332,7 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 		if ((run_jobs == 0) && ((exit_jobs != 0) || (done_jobs == 0))) {
 fmt.Println("sending notification")
 			send_notification_email(projectBool, proj_name)
+			ui.Render(button_grid)
 		}
 	}
 
@@ -327,7 +343,6 @@ fmt.Println("sending notification")
 		email_btn.TextStyle.Fg = ui.Color(248)
 		email_btn.Text = "Email On All Ending [e] "
 	}
-	ui.Render(button_grid)
 
 	statsGrid(run_jobs, pend_jobs, done_jobs, exit_jobs)
 	ui.Render(*job_table) // display constructed table
@@ -427,7 +442,7 @@ func main() {
 	job_table.RowSeparator = false
 
 	// set table headers
-	job_table.Rows = [][]string{[]string{"JOB ID", "STATUS", "QUEUE", "RAM USAGE", "%Time Limit"}}
+	job_table.Rows = [][]string{[]string{"JOB ID", "STATUS", "QUEUE", "RAM USAGE", "%TIME LIMIT"}}
 	job_table.RowStyles[0] = ui.NewStyle(ui.ColorYellow, ui.ColorClear, ui.ModifierBold)
 
 	refreshInterface(db, &job_table)
@@ -435,7 +450,7 @@ func main() {
 
 	// setup keyboard input to process user actions
 	uiEvents := ui.PollEvents()
-	ticker := time.NewTicker(500*time.Millisecond).C // update interface every second
+	ticker := time.NewTicker(time.Second).C // update interface every second
 	for {
 		select {
 		case e := <-uiEvents:
@@ -443,7 +458,7 @@ func main() {
 
 			// quit on pressing q or contrl-c
 			case "q", "<C-c>":
-			writeDatabase(usr_home, usr_config, db)
+				writeDatabase(usr_home, usr_config, db)
 				return
 
 			case "e":
@@ -458,29 +473,18 @@ func main() {
 					}
 					ui.Render(button_grid)
 				} else {
-					statusline.Text = "Error: " + "no currently running jobs"
-					ui.Render(statusline_grid)
-					time.Sleep(2 * time.Second)
-					ui.Render(button_grid)
+					async_statusline_message("Error: " + "no currently running jobs", 2)
 				}
 
 			// clear the cache of saved jobs
 			case "c", "<C-l>":
-				clear_btn.TextStyle.Fg = ui.ColorYellow
-				clear_btn.Text = "Clearing cached job info"
-				ui.Render(button_grid)
+				statusline.TextStyle.Fg =  ui.ColorYellow
+				async_statusline_message("Clearing cached job info", 2)
 
 				// replace savedDatabase with an empty one on pressing clear
 				var emptyDB map[string]recStruct
 				writeDatabase(usr_home, usr_config, emptyDB)
 				refreshInterface(db, &job_table)
-
-				// pause long enough for user to see whats happening
-				time.Sleep(2 * time.Second)
-
-				clear_btn.TextStyle.Fg = ui.Color(248)
-				clear_btn.Text = "Clear Job Cache [c] "
-				ui.Render(button_grid)
 
 
 			// re-render all elements on resizing terminal window
@@ -502,11 +506,13 @@ func main() {
 					}
 
 					kill_menu = true
-					statusline.Text = "Are you sure you want to kill all unfinished bjobs"+projectText+"? [Yn] "
 					statusline.TextStyle.Fg = ui.ColorRed
+					async_statusline_message("Are you sure you want to kill all unfinished bjobs"+projectText+"? [Yn] ", 2)
 
-					ui.Render(statusline_grid)
-					} else {
+				} else {
+					statusline.TextStyle.Fg = ui.ColorRed
+					async_statusline_message("Error: " + "no currently running jobs", 2)
+
 					statusline.Text = "Error: " + "no currently running jobs"
 					ui.Render(statusline_grid)
 					time.Sleep(2 * time.Second)
@@ -526,9 +532,6 @@ func main() {
 			case "y":
 				if kill_menu {
 					// if we say yes to all-kill menu then alert user
-					statusline.Text = "Killing all bjobs, this might take a minute"
-					ui.Render(statusline_grid)
-
 					for jobid, _ := range db {
 						cmd := exec.Command("bkill", jobid)
 						_, err := cmd.Output()
@@ -538,11 +541,8 @@ func main() {
 						}
 					}
 
-					// pause long enough for user to see whats happening
-					time.Sleep(5 * time.Second)
-
 					killall_btn.TextStyle.Fg = ui.Color(248)
-					ui.Render(button_grid)
+					async_statusline_message("Kill command sent, may take a minute to show", 5)
 				}
 
 			}
