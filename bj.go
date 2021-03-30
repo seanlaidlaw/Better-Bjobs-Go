@@ -25,6 +25,15 @@ var run_jobs int
 var done_jobs int
 var exit_jobs int
 
+// initialise colors
+var ColorGrey ui.Color
+var ColorYellow ui.Color
+var ColorBlue ui.Color
+var ColorRed ui.Color
+var ColorGreen ui.Color
+var ColorAlert ui.Color
+
+
 // initialise the two buttons that need to be global variables
 // (their appearence needs to be modified from inside functions)
 var email_btn *widgets.Paragraph
@@ -134,7 +143,7 @@ func send_notification_email(projectBool bool, proj_name string) {
 		statusline.Text = "Error: " + err.Error()
 		ui.Render(statusline_grid)
 	}
-	email_btn.TextStyle.Fg = ui.Color(248)
+	email_btn.TextStyle.Fg = ColorGrey
 	email_btn.Text = "Email On All Ending [e] "
 	email_on = !(email_on)
 }
@@ -149,7 +158,7 @@ func async_statusline_message(text string, time_ms int) {
 		time.Sleep(time.Duration(time_ms) * time.Second)
 
 	ui.Render(button_grid)
-	statusline.TextStyle.Fg = ui.Color(248) // reset statusline defafults
+	statusline.TextStyle.Fg = ColorGrey // reset statusline defafults
 	statusline.TextStyle.Bg = ui.ColorClear
 	}(text, time_ms)
 }
@@ -323,15 +332,15 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 
 	for _, id := range remaining_run_jobs_list {
 		(*job_table).Rows = append((*job_table).Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage(), strings.Replace(db[id].COMPLETE, " L","",1)})
-		(*job_table).RowStyles[(len((*job_table).Rows)-1)] = ui.NewStyle(ui.Color(248), ui.ColorClear)
+		(*job_table).RowStyles[(len((*job_table).Rows)-1)] = ui.NewStyle(ColorGrey, ui.ColorClear)
 	}
 	for _, id := range exit_jobs_list {
 		(*job_table).Rows = append((*job_table).Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage(), db[id].EXIT_REASON})
-		(*job_table).RowStyles[(len((*job_table).Rows)-1)] = ui.NewStyle(ui.ColorRed, ui.ColorClear)
+		(*job_table).RowStyles[(len((*job_table).Rows)-1)] = ui.NewStyle(ColorRed, ui.ColorClear)
 	}
 	for _, id := range done_jobs_list {
 		(*job_table).Rows = append((*job_table).Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage()})
-		(*job_table).RowStyles[(len((*job_table).Rows)-1)] = ui.NewStyle(ui.ColorGreen, ui.ColorClear)
+		(*job_table).RowStyles[(len((*job_table).Rows)-1)] = ui.NewStyle(ColorGreen, ui.ColorClear)
 	}
 
 
@@ -343,10 +352,10 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 	}
 
 	if email_on {
-		email_btn.TextStyle.Fg = ui.ColorGreen
+		email_btn.TextStyle.Fg = ColorGreen
 		email_btn.Text = "Email notification on"
 	} else {
-		email_btn.TextStyle.Fg = ui.Color(248)
+		email_btn.TextStyle.Fg = ColorGrey
 		email_btn.Text = "Email On All Ending [e] "
 	}
 
@@ -359,10 +368,9 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 	}
 }
 
-
 func danger_alert(table1 *widgets.Table, db map[string]recStruct, id string, alert string) *widgets.Table {
 	table1.Rows = append(table1.Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, "Job is "+alert})
-	table1.RowStyles[(len(table1.Rows)-1)] = ui.NewStyle(ui.Color(197), ui.ColorClear, ui.ModifierUnderline)
+	table1.RowStyles[(len(table1.Rows)-1)] = ui.NewStyle(ColorAlert, ui.ColorClear, ui.ModifierUnderline)
 	return table1
 }
 
@@ -382,6 +390,13 @@ func main() {
 		projectBool = true
 	}
 
+	//the white used for the borders is #C0C1C0
+	ColorRed = ui.ColorRed // #EC6067 in my terminal colorscheme
+	ColorYellow = ui.ColorYellow // #FDC254
+	ColorBlue = ui.Color(14)
+	ColorGreen = ui.Color(2) // #89C487
+	ColorGrey = ui.Color(248) // #979797
+	ColorAlert = ui.Color(203) // #FB454D
 
 	// load config and cached job information
 	usr_home, _ := os.UserHomeDir()
@@ -411,7 +426,7 @@ func main() {
 			proj_n_len = len([]rune(proj_name_rune))
 		}
 		project_name_label.Text = proj_name
-		project_name_label.TextStyle.Fg = ui.ColorBlue
+		project_name_label.TextStyle.Fg = ColorBlue
 		project_name_label.SetRect((termWidth-proj_n_len-2), termHeight-6, termWidth+1, termHeight-3)
 	}
 
@@ -438,22 +453,22 @@ func main() {
 	quit_btn := widgets.NewParagraph()
 	quit_btn.Text = "Quit [q] "
 	quit_btn.Border = false
-	quit_btn.TextStyle.Fg = ui.Color(248)
+	quit_btn.TextStyle.Fg = ColorGrey
 
 	email_btn = widgets.NewParagraph()
 	email_btn.Text = "Email On All Ending [e] "
 	email_btn.Border = false
-	email_btn.TextStyle.Fg = ui.Color(248)
+	email_btn.TextStyle.Fg = ColorGrey
 
 	killall_btn = widgets.NewParagraph()
 	killall_btn.Text = "Kill All Jobs [k] "
 	killall_btn.Border = false
-	killall_btn.TextStyle.Fg = ui.Color(248)
+	killall_btn.TextStyle.Fg = ColorGrey
 
 	clear_btn := widgets.NewParagraph()
 	clear_btn.Text = "Clear Job Cache [c] "
 	clear_btn.Border = false
-	clear_btn.TextStyle.Fg = ui.Color(248)
+	clear_btn.TextStyle.Fg = ColorGrey
 
 	button_grid.Set(ui.NewRow(1.0/1.0,
 				ui.NewCol(1.0/4, quit_btn),
@@ -471,7 +486,7 @@ func main() {
 
 	// set table headers
 	job_table.Rows = [][]string{[]string{"JOB ID", "STATUS", "QUEUE", "RAM USAGE", "%TIME LIMIT"}}
-	job_table.RowStyles[0] = ui.NewStyle(ui.ColorYellow, ui.ColorClear, ui.ModifierBold)
+	job_table.RowStyles[0] = ui.NewStyle(ColorYellow, ui.ColorClear, ui.ModifierBold)
 
 	refreshInterface(db, &job_table)
 
@@ -493,10 +508,10 @@ func main() {
 				if run_jobs > 0 {
 					email_on = !(email_on)
 					if email_on {
-						email_btn.TextStyle.Fg = ui.ColorGreen
+						email_btn.TextStyle.Fg = ColorGrey
 						email_btn.Text = "Email notification on"
 					} else {
-						email_btn.TextStyle.Fg = ui.Color(248)
+						email_btn.TextStyle.Fg = ColorGrey
 						email_btn.Text = "Email On All Ending [e] "
 					}
 					ui.Render(button_grid)
@@ -506,7 +521,7 @@ func main() {
 
 			// clear the cache of saved jobs
 			case "c", "<C-l>":
-				statusline.TextStyle.Fg =  ui.ColorYellow
+				statusline.TextStyle.Fg =  ColorYellow
 				async_statusline_message("Clearing cached job info", 2)
 
 				// replace savedDatabase with an empty one on pressing clear
@@ -534,11 +549,11 @@ func main() {
 					}
 
 					kill_menu = true
-					statusline.TextStyle.Fg = ui.ColorRed
+					statusline.TextStyle.Fg = ColorRed
 					async_statusline_message("Are you sure you want to kill all unfinished bjobs"+projectText+"? [Yn] ", 5)
 
 				} else {
-					statusline.TextStyle.Fg = ui.ColorRed
+					statusline.TextStyle.Fg = ColorRed
 					async_statusline_message("Error: " + "no currently running jobs", 5)
 				}
 
@@ -547,7 +562,7 @@ func main() {
 			case "n":
 				if kill_menu {
 					// if we say no to all-kill menu then reset statusline and put back buttons
-					statusline.TextStyle.Fg = ui.Color(248)
+					statusline.TextStyle.Fg = ColorGrey
 					statusline.Text = ""
 					ui.Render(button_grid)
 				}
@@ -564,7 +579,7 @@ func main() {
 						}
 					}
 
-					killall_btn.TextStyle.Fg = ui.Color(248)
+					killall_btn.TextStyle.Fg = ColorGrey
 					async_statusline_message("Kill command sent, may take a minute to show", 5)
 				}
 
