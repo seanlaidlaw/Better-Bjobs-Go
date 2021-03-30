@@ -24,6 +24,8 @@ var pend_jobs int
 var run_jobs int
 var done_jobs int
 var exit_jobs int
+var termWidth int
+var termHeight int
 
 // initialise colors
 var ColorGrey ui.Color
@@ -43,6 +45,7 @@ var killall_btn *widgets.Paragraph
 var project_name_label *widgets.Paragraph
 
 var button_grid *ui.Grid
+var stats_grid *ui.Grid
 var statusline_grid *ui.Grid
 var statusline *widgets.Paragraph
 
@@ -253,7 +256,7 @@ func updateDatabase(db map[string]recStruct, bjobs_map map[string]recStruct) map
 
 // set job counts / statistics line
 func statsGrid(run_jobs int, pend_jobs int, done_jobs int, exit_jobs int) {
-	stats_grid := ui.NewGrid()
+	stats_grid = ui.NewGrid()
 	termWidth, termHeight := ui.TerminalDimensions()
 	stats_grid.SetRect(0, termHeight-3, termWidth, termHeight-2)
 	run_jobs_p := widgets.NewParagraph()
@@ -281,6 +284,8 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 
 	// remove all rows in table but header, as we are going to populate with newly updated rows
 	(*job_table).Rows = (*job_table).Rows[:1]
+
+	(*job_table).SetRect(0-1, 0, termWidth+1, termHeight-3)
 
 	// fetch and parse output from bjobs command
 	bjobs_map := run_bjobs()
@@ -412,7 +417,7 @@ func main() {
 	defer ui.Close()
 
 	// get dimensions of current terminal window
-	termWidth, termHeight := ui.TerminalDimensions()
+	termWidth, termHeight = ui.TerminalDimensions()
 
 	// setup project label
 	project_name_label = widgets.NewParagraph()
@@ -480,7 +485,6 @@ func main() {
 
 
 	job_table := widgets.NewTable()
-	job_table.SetRect(0-1, 0, termWidth+1, termHeight-3)
 	job_table.TextAlignment = ui.AlignCenter
 	job_table.RowSeparator = false
 
@@ -533,10 +537,13 @@ func main() {
 			// re-render all elements on resizing terminal window
 			case "<Resize>":
 				payload := e.Payload.(ui.Resize)
-				job_table.SetRect(0, 0, payload.Width, payload.Height)
+				termWidth = payload.Width
+				termHeight = payload.Height
 				ui.Clear()
-				ui.Render(button_grid)
 				refreshInterface(db, &job_table)
+				ui.Render(stats_grid)
+				button_grid.SetRect(0, termHeight-2, termWidth, termHeight+1)
+				ui.Render(button_grid)
 
 
 			// loop over all cached bjob ids killing each one on "k"
