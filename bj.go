@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	ui "github.com/gizak/termui"
-	"github.com/gizak/termui/widgets"
+	ui "github.com/gizak/termui/v3"
+	"github.com/gizak/termui/v3/widgets"
 )
 
 // initialise variables that need to be global
@@ -169,7 +169,6 @@ func run_bjobs() map[string]recStruct {
 	} else {
 		bjobs_cmd = exec.Command("bjobs", "-a", "-json", "-o", "jobid stat queue kill_reason dependency exit_reason time_left %complete run_time max_mem memlimit nthreads exit_code")
 	}
-	//bjobs_cmd = exec.Command("cat","example.json")
 
 	// 1. fetch current bjobs from shell
 	bjobsJson, err := bjobs_cmd.Output()
@@ -202,22 +201,34 @@ func writeDatabase(usr_home string, usr_config string, db map[string]recStruct) 
 	if err != nil {
 		statusline.Text = "Error in writing cache on exit: " + err.Error()
 		ui.Render(statusline_grid)
+		return
 	}
-	ioutil.WriteFile(usr_config, b, 0644)
+	err = ioutil.WriteFile(usr_config, b, 0644)
+	if err != nil {
+		statusline.Text = "Error in writing cache on exit: " + err.Error()
+		ui.Render(statusline_grid)
+	}
 }
 
 func readSavedDatabase(usr_config string) map[string]recStruct {
 	db := make(map[string]recStruct)
 	if _, err := os.Stat(usr_config); !os.IsNotExist(err) {
-		savedDatabaseJson, _ := ioutil.ReadFile(usr_config)
-
+		savedDatabaseJson, err := ioutil.ReadFile(usr_config)
+		if err != nil {
+			statusline.Text = "Error in reading job cache: " + err.Error()
+			ui.Render(statusline_grid)
+			return db
+		}
 		json.Unmarshal([]byte(savedDatabaseJson), &db)
-	} else if err != nil {
-		statusline.Text = "Error in reading job cache: " + err.Error()
-		ui.Render(statusline_grid)
 	}
-
 	return db
+}
+
+func clearDatabase(usr_config string) error {
+	if _, err := os.Stat(usr_config); !os.IsNotExist(err) {
+		return os.Remove(usr_config)
+	}
+	return nil
 }
 
 func updateDatabase(db map[string]recStruct, bjobs_map map[string]recStruct) map[string]recStruct {
@@ -272,29 +283,93 @@ func statsGrid(run_jobs int, pend_jobs int, done_jobs int, exit_jobs int) {
 	ui.Render(stats_grid)
 }
 
-func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
-
-	// remove all rows in table but header, as we are going to populate with newly updated rows
-	(*job_table).Rows = (*job_table).Rows[:1]
-
-	(*job_table).SetRect(0-1, 0, termWidth+1, termHeight-3)
-
-	// fetch and parse output from bjobs command
+func updateJobs(db map[string]recStruct) (map[string]recStruct, bool) {
+	// Fetch and parse output from bjobs command
 	bjobs_map := run_bjobs()
 
-	// merge with existing cache
-	db = updateDatabase(db, bjobs_map)
+	// Assume no changes initially
+	jobsChanged := false
 
-	// set initial counts
+	// Iterate through all jobs from bjobs_map
+	for id, new_job := range bjobs_map {
+		// Check if the job exists in the current database
+		if old_job, exists := db[id]; exists {
+			// Compare fields of the job to detect any changes in status, remaining time, etc.
+			if new_job.STAT != old_job.STAT ||
+				new_job.TIME_LEFT != old_job.TIME_LEFT ||
+				new_job.COMPLETE != old_job.COMPLETE ||
+				new_job.MAX_MEM != old_job.MAX_MEM {
+				// A meaningful change was detected
+				jobsChanged = true
+				db[id] = new_job // Update the job in the database
+			}
+		} else {
+			// Job is new (doesn't exist in the current db)
+			jobsChanged = true
+			db[id] = new_job
+		}
+	}
+
+	// Now, check if any jobs were removed (i.e., present in `db` but not in `bjobs_map`)
+	for id := range db {
+		if _, exists := bjobs_map[id]; !exists {
+			// Job was removed
+			jobsChanged = true
+			delete(db, id) // Remove job from db
+		}
+	}
+
+	// Set job counts after updating the job data
+	new_run_jobs := 0
+	new_pend_jobs := 0
+	new_done_jobs := 0
+	new_exit_jobs := 0
+
+	for _, bjob := range db {
+		switch bjob.STAT {
+		case "PEND":
+			new_pend_jobs++
+		case "DONE":
+			new_done_jobs++
+		case "EXIT":
+			new_exit_jobs++
+		case "RUN":
+			new_run_jobs++
+		}
+	}
+
+	// Check if job counts have changed
+	if new_run_jobs != run_jobs || new_pend_jobs != pend_jobs || new_done_jobs != done_jobs || new_exit_jobs != exit_jobs {
+		jobsChanged = true
+	}
+
+	// Update global job counts
+	run_jobs = new_run_jobs
+	pend_jobs = new_pend_jobs
+	done_jobs = new_done_jobs
+	exit_jobs = new_exit_jobs
+
+	return db, jobsChanged
+}
+
+func redrawUI(db map[string]recStruct, job_table **widgets.Table) {
+	// Clear the current table rows (except the header)
+	(*job_table).Rows = (*job_table).Rows[:1]
+	(*job_table).SetRect(0-1, 0, termWidth+1, termHeight-3)
+
+	// Prepare job lists for UI rendering
 	var all_run_jobs_list []string
 	var exit_jobs_list []string
 	var done_jobs_list []string
 	var remaining_run_jobs_list []string
-	pend_jobs = 0
+
+	// Reset job counts
 	run_jobs = 0
+	pend_jobs = 0
 	done_jobs = 0
 	exit_jobs = 0
-	// add job info to rows
+
+	// Classify jobs and populate lists for display
 	for _, bjob := range db {
 		switch bjob.STAT {
 		case "PEND":
@@ -310,10 +385,13 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 			all_run_jobs_list = append(all_run_jobs_list, bjob.JOBID)
 		}
 	}
+
+	// Sort the job lists for consistent display order
 	sort.Strings(done_jobs_list)
 	sort.Strings(exit_jobs_list)
-
 	sort.Strings(all_run_jobs_list)
+
+	// Populate job table with RUN jobs
 	for _, id := range all_run_jobs_list {
 		job := db[id]
 		completion_perc, _ := strconv.ParseFloat(strings.Replace(job.COMPLETE, "% L", "", 1), 64)
@@ -327,26 +405,33 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 	}
 	sort.Strings(remaining_run_jobs_list)
 
+	// Add remaining RUN jobs to the table
 	for _, id := range remaining_run_jobs_list {
 		(*job_table).Rows = append((*job_table).Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage(), strings.Replace(db[id].COMPLETE, " L", "", 1)})
 		(*job_table).RowStyles[(len((*job_table).Rows) - 1)] = ui.NewStyle(ColorGrey, ui.ColorClear)
 	}
+
+	// Add EXIT jobs to the table
 	for _, id := range exit_jobs_list {
 		(*job_table).Rows = append((*job_table).Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage(), db[id].EXIT_REASON})
 		(*job_table).RowStyles[(len((*job_table).Rows) - 1)] = ui.NewStyle(ColorRed, ui.ColorClear)
 	}
+
+	// Add DONE jobs to the table
 	for _, id := range done_jobs_list {
 		(*job_table).Rows = append((*job_table).Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage()})
 		(*job_table).RowStyles[(len((*job_table).Rows) - 1)] = ui.NewStyle(ColorGreen, ui.ColorClear)
 	}
 
+	// Check if email notifications need to be sent
 	if email_on {
-		if (run_jobs == 0) && ((exit_jobs != 0) || (done_jobs == 0)) {
+		if (run_jobs == 0) && ((exit_jobs != 0) || (done_jobs != 0)) {
 			send_notification_email(projectBool, proj_name)
 			ui.Render(button_grid)
 		}
 	}
 
+	// Update email button text based on the email state
 	if email_on {
 		email_btn.TextStyle.Fg = ColorGreen
 		email_btn.Text = "Email notification on"
@@ -355,9 +440,11 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 		email_btn.Text = "Email On All Ending [e] "
 	}
 
+	// Update stats and render them
 	statsGrid(run_jobs, pend_jobs, done_jobs, exit_jobs)
-	ui.Render(*job_table) // display constructed table
-	// if project then show label on refresh screen
+	ui.Render(*job_table) // Display the constructed table
+
+	// Render project name if applicable
 	if projectBool {
 		ui.Render(project_name_label)
 	}
@@ -410,16 +497,15 @@ func main() {
 	project_name_label = widgets.NewParagraph()
 
 	if projectBool {
+		// Truncate only the displayed text if too long
+		display_name := proj_name
 		proj_name_rune := []rune(proj_name)
-		proj_n_len := len(proj_name_rune)
-		if proj_n_len > 20 {
-			proj_name_rune = proj_name_rune[0:20]
-			proj_name = string(proj_name_rune[0:20])
-			proj_n_len = len([]rune(proj_name_rune))
+		if len(proj_name_rune) > 20 {
+			display_name = string(proj_name_rune[0:20]) + "..."
 		}
-		project_name_label.Text = proj_name
+		project_name_label.Text = display_name
 		project_name_label.TextStyle.Fg = ColorBlue
-		project_name_label.SetRect((termWidth - proj_n_len - 2), termHeight-6, termWidth+1, termHeight-3)
+		project_name_label.SetRect((termWidth - len([]rune(display_name)) - 2), termHeight-6, termWidth+1, termHeight-3)
 	}
 
 	// set statusline to be same location as buttons
@@ -442,21 +528,25 @@ func main() {
 	quit_btn.Text = "Quit [q] "
 	quit_btn.Border = false
 	quit_btn.TextStyle.Fg = ColorGrey
+	quit_btn.WrapText = false
 
 	email_btn = widgets.NewParagraph()
 	email_btn.Text = "Email On All Ending [e] "
 	email_btn.Border = false
 	email_btn.TextStyle.Fg = ColorGrey
+	email_btn.WrapText = false
 
 	killall_btn = widgets.NewParagraph()
 	killall_btn.Text = "Kill All Jobs [k] "
 	killall_btn.Border = false
 	killall_btn.TextStyle.Fg = ColorGrey
+	killall_btn.WrapText = false
 
 	clear_btn := widgets.NewParagraph()
 	clear_btn.Text = "Clear Job Cache [c] "
 	clear_btn.Border = false
 	clear_btn.TextStyle.Fg = ColorGrey
+	clear_btn.WrapText = false
 
 	button_grid.Set(ui.NewRow(1.0/1.0,
 		ui.NewCol(1.0/4, quit_btn),
@@ -473,16 +563,22 @@ func main() {
 	job_table.Rows = [][]string{[]string{"JOB ID", "STATUS", "QUEUE", "RAM USAGE", "%TIME LIMIT"}}
 	job_table.RowStyles[0] = ui.NewStyle(ColorYellow, ui.ColorClear, ui.ModifierBold)
 
-	refreshInterface(db, &job_table)
+	// Do initial job fetch and update the database
+	bjobs_map := run_bjobs()
+	db = updateDatabase(db, bjobs_map)
+	writeDatabase(usr_home, usr_config, db)
+	redrawUI(db, &job_table)
+
+	// Use a ticker to update job data periodically
+	ticker := time.NewTicker(5 * time.Second).C
 
 	// setup keyboard input to process user actions
+	// Main event loop
 	uiEvents := ui.PollEvents()
-	ticker := time.NewTicker(time.Second).C // update interface every second
 	for {
 		select {
 		case e := <-uiEvents:
 			switch e.ID {
-
 			// quit on pressing q or contrl-c
 			case "q", "<C-c>":
 				writeDatabase(usr_home, usr_config, db)
@@ -490,17 +586,18 @@ func main() {
 
 			case "e":
 				if run_jobs > 0 {
-					email_on = !(email_on)
+					email_on = !email_on
 					if email_on {
-						email_btn.TextStyle.Fg = ColorGrey
+						email_btn.TextStyle.Fg = ColorGreen
 						email_btn.Text = "Email notification on"
 					} else {
 						email_btn.TextStyle.Fg = ColorGrey
 						email_btn.Text = "Email On All Ending [e] "
 					}
-					ui.Render(button_grid)
+					ui.Render(button_grid) // Immediately render the button grid
+					redrawUI(db, &job_table)
 				} else {
-					async_statusline_message("Error: "+"no currently running jobs", 2)
+					async_statusline_message("Error: no currently running jobs", 2)
 				}
 
 			// clear the cache of saved jobs
@@ -508,23 +605,29 @@ func main() {
 				statusline.TextStyle.Fg = ColorYellow
 				async_statusline_message("Clearing cached job info", 2)
 
-				// replace savedDatabase with an empty one on pressing clear
-				var emptyDB map[string]recStruct
-				writeDatabase(usr_home, usr_config, emptyDB)
-				refreshInterface(db, &job_table)
+				// Clear the database file
+				if err := clearDatabase(usr_config); err != nil {
+					statusline.Text = "Error clearing cache: " + err.Error()
+					ui.Render(statusline_grid)
+				}
+
+				// Clear the in-memory db and fetch fresh jobs
+				db = make(map[string]recStruct)
+				recent_jobs := run_bjobs()
+
+				// Re-populate db with only the recent jobs
+				db = updateDatabase(db, recent_jobs)
+
+				// Immediately redraw after clearing
+				redrawUI(db, &job_table)
 
 			// re-render all elements on resizing terminal window
 			case "<Resize>":
 				payload := e.Payload.(ui.Resize)
 				termWidth = payload.Width
 				termHeight = payload.Height
-				ui.Clear()
-				refreshInterface(db, &job_table)
-				ui.Render(stats_grid)
-				button_grid.SetRect(0, termHeight-2, termWidth, termHeight+1)
-				ui.Render(button_grid)
+				redrawUI(db, &job_table)
 
-			// loop over all cached bjob ids killing each one on "k"
 			case "k":
 				if run_jobs > 0 {
 					// specify that only project ids will be killed if we have a project subview
@@ -536,21 +639,13 @@ func main() {
 					kill_menu = true
 					statusline.TextStyle.Fg = ColorRed
 					async_statusline_message("Are you sure you want to kill all unfinished bjobs"+projectText+"? [Yn] ", 5)
-
+					redrawUI(db, &job_table)
 				} else {
 					statusline.TextStyle.Fg = ColorRed
-					async_statusline_message("Error: "+"no currently running jobs", 5)
+					async_statusline_message("Error: no currently running jobs", 5)
 				}
 
 			// manage yes and no prompts initiated by other cases
-			case "n":
-				if kill_menu {
-					// if we say no to all-kill menu then reset statusline and put back buttons
-					statusline.TextStyle.Fg = ColorGrey
-					statusline.Text = ""
-					ui.Render(button_grid)
-				}
-
 			case "y":
 				if kill_menu {
 					// if we say yes to all-kill menu then alert user
@@ -562,15 +657,24 @@ func main() {
 							ui.Render(statusline_grid)
 						}
 					}
-
-					killall_btn.TextStyle.Fg = ColorGrey
-					async_statusline_message("Kill command sent, may take a minute to show", 5)
+					kill_menu = false
+					redrawUI(db, &job_table)
 				}
 
+			case "n":
+				if kill_menu {
+					// if we say no to all-kill menu then reset statusline and put back buttons
+					kill_menu = false
+					redrawUI(db, &job_table)
+				}
 			}
+
 		case <-ticker:
-			refreshInterface(db, &job_table)
+			// Periodically update the jobs and redraw only if needed
+			db, jobsChanged := updateJobs(db)
+			if jobsChanged {
+				redrawUI(db, &job_table)
+			}
 		}
 	}
-
 }
