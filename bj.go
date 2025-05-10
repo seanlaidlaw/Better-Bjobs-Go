@@ -665,6 +665,10 @@ func main() {
 				if kill_menu {
 					// if we say no to all-kill menu then reset statusline and put back buttons
 					kill_menu = false
+					statusline.TextStyle.Fg = ColorGrey
+					statusline.Text = ""
+					ui.Render(statusline_grid)
+					ui.Render(button_grid)
 					redrawUI(db, &job_table)
 				}
 			}
