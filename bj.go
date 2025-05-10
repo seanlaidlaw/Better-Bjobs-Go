@@ -35,7 +35,6 @@ var ColorRed ui.Color
 var ColorGreen ui.Color
 var ColorAlert ui.Color
 
-
 // initialise the two buttons that need to be global variables
 // (their appearence needs to be modified from inside functions)
 var email_btn *widgets.Paragraph
@@ -49,24 +48,23 @@ var stats_grid *ui.Grid
 var statusline_grid *ui.Grid
 var statusline *widgets.Paragraph
 
-
 type recStruct struct {
-	JOBID string
-	STAT string
-	QUEUE string
+	JOBID       string
+	STAT        string
+	QUEUE       string
 	KILL_REASON string
-	DEPENDENCY string
+	DEPENDENCY  string
 	EXIT_REASON string
-	TIME_LEFT string
-	COMPLETE string `json:"%COMPLETE"`
-	RUN_TIME string
-	MAX_MEM string
-	MEMLIMIT string
-	NTHREADS string
-	EXIT_CODE string
-	}
+	TIME_LEFT   string
+	COMPLETE    string `json:"%COMPLETE"`
+	RUN_TIME    string
+	MAX_MEM     string
+	MEMLIMIT    string
+	NTHREADS    string
+	EXIT_CODE   string
+}
 
-func (rec recStruct) mem_usage()  string {
+func (rec recStruct) mem_usage() string {
 	max_mem := rec.MAX_MEM
 	memlimit := rec.MEMLIMIT
 	memusage := ""
@@ -96,13 +94,11 @@ func (rec recStruct) atmemlimit() bool {
 	return atlimit
 }
 
-
-
 func parse_bytes_output(bytes_string string) string {
-	bytes_string = strings.ReplaceAll(bytes_string, "Gbytes","G")
-	bytes_string = strings.ReplaceAll(bytes_string, "Mbytes","M")
-	bytes_string = strings.ReplaceAll(bytes_string, "Kbytes","K")
-	bytes_string = strings.ReplaceAll(bytes_string, " ","")
+	bytes_string = strings.ReplaceAll(bytes_string, "Gbytes", "G")
+	bytes_string = strings.ReplaceAll(bytes_string, "Mbytes", "M")
+	bytes_string = strings.ReplaceAll(bytes_string, "Kbytes", "K")
+	bytes_string = strings.ReplaceAll(bytes_string, " ", "")
 
 	return bytes_string
 }
@@ -111,7 +107,7 @@ func parse_human_sizes(human_size_str string) float64 {
 	human_size_str = strings.Replace(human_size_str, "G", "000000000", 1)
 	human_size_str = strings.Replace(human_size_str, "M", "000000", 1)
 	human_size_str = strings.Replace(human_size_str, "K", "000", 1)
-	human_size_str = strings.ReplaceAll(human_size_str, " ","",)
+	human_size_str = strings.ReplaceAll(human_size_str, " ", "")
 	machine_readable_size, _ := strconv.ParseFloat(human_size_str, 64)
 
 	return machine_readable_size
@@ -119,7 +115,7 @@ func parse_human_sizes(human_size_str string) float64 {
 
 func send_notification_email(projectBool bool, proj_name string) {
 	email_subject := "[BJ] Bjobs ended"
-	if projectBool{
+	if projectBool {
 		email_subject = email_subject + " for project " + proj_name
 	}
 
@@ -151,7 +147,6 @@ func send_notification_email(projectBool bool, proj_name string) {
 	email_on = !(email_on)
 }
 
-
 func async_statusline_message(text string, time_ms int) {
 	// use goroutine to asynchronously display message and wait
 	// without blocking rest of interface
@@ -160,9 +155,9 @@ func async_statusline_message(text string, time_ms int) {
 		ui.Render(statusline_grid)
 		time.Sleep(time.Duration(time_ms) * time.Second)
 
-	ui.Render(button_grid)
-	statusline.TextStyle.Fg = ColorGrey // reset statusline defafults
-	statusline.TextStyle.Bg = ui.ColorClear
+		ui.Render(button_grid)
+		statusline.TextStyle.Fg = ColorGrey // reset statusline defafults
+		statusline.TextStyle.Bg = ui.ColorClear
 	}(text, time_ms)
 }
 
@@ -170,9 +165,9 @@ func run_bjobs() map[string]recStruct {
 	var bjobs_cmd *exec.Cmd
 
 	if projectBool {
-		bjobs_cmd = exec.Command("bjobs","-Jd",proj_name,"-a","-json","-o","jobid stat queue kill_reason dependency exit_reason time_left %complete run_time max_mem memlimit nthreads exit_code")
+		bjobs_cmd = exec.Command("bjobs", "-Jd", proj_name, "-a", "-json", "-o", "jobid stat queue kill_reason dependency exit_reason time_left %complete run_time max_mem memlimit nthreads exit_code")
 	} else {
-		bjobs_cmd = exec.Command("bjobs","-a","-json","-o","jobid stat queue kill_reason dependency exit_reason time_left %complete run_time max_mem memlimit nthreads exit_code")
+		bjobs_cmd = exec.Command("bjobs", "-a", "-json", "-o", "jobid stat queue kill_reason dependency exit_reason time_left %complete run_time max_mem memlimit nthreads exit_code")
 	}
 	//bjobs_cmd = exec.Command("cat","example.json")
 
@@ -198,7 +193,6 @@ func run_bjobs() map[string]recStruct {
 		bj_map[bj.JOBID] = bj
 	}
 
-
 	return bj_map
 }
 
@@ -212,10 +206,9 @@ func writeDatabase(usr_home string, usr_config string, db map[string]recStruct) 
 	ioutil.WriteFile(usr_config, b, 0644)
 }
 
-
-func readSavedDatabase(usr_config string) map[string]recStruct{
+func readSavedDatabase(usr_config string) map[string]recStruct {
 	db := make(map[string]recStruct)
-	if _, err := os.Stat(usr_config); ! os.IsNotExist(err) {
+	if _, err := os.Stat(usr_config); !os.IsNotExist(err) {
 		savedDatabaseJson, _ := ioutil.ReadFile(usr_config)
 
 		json.Unmarshal([]byte(savedDatabaseJson), &db)
@@ -227,7 +220,6 @@ func readSavedDatabase(usr_config string) map[string]recStruct{
 	return db
 }
 
-
 func updateDatabase(db map[string]recStruct, bjobs_map map[string]recStruct) map[string]recStruct {
 	// get list of jobids whose data needs udpating
 	updateList := make([]string, len(bjobs_map))
@@ -238,7 +230,7 @@ func updateDatabase(db map[string]recStruct, bjobs_map map[string]recStruct) map
 			updateList[i] = id
 		} else {
 			// check if jobs are identical
-			if (new_job != db[id]) {
+			if new_job != db[id] {
 				updateList[i] = id
 			}
 		}
@@ -246,7 +238,7 @@ func updateDatabase(db map[string]recStruct, bjobs_map map[string]recStruct) map
 	}
 
 	for i := 0; i < len(updateList); i++ {
-		if (updateList[i] != "") {
+		if updateList[i] != "" {
 			db[updateList[i]] = bjobs_map[updateList[i]]
 		}
 	}
@@ -273,10 +265,10 @@ func statsGrid(run_jobs int, pend_jobs int, done_jobs int, exit_jobs int) {
 	exit_jobs_p.Border = false
 
 	stats_grid.Set(ui.NewRow(1.0/1.0,
-				ui.NewCol(1.0/4, run_jobs_p),
-				ui.NewCol(1.0/4, pend_jobs_p),
-				ui.NewCol(1.0/4, done_jobs_p),
-				ui.NewCol(1.0/4, exit_jobs_p)))
+		ui.NewCol(1.0/4, run_jobs_p),
+		ui.NewCol(1.0/4, pend_jobs_p),
+		ui.NewCol(1.0/4, done_jobs_p),
+		ui.NewCol(1.0/4, exit_jobs_p)))
 	ui.Render(stats_grid)
 }
 
@@ -324,8 +316,8 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 	sort.Strings(all_run_jobs_list)
 	for _, id := range all_run_jobs_list {
 		job := db[id]
-		completion_perc,_ := strconv.ParseFloat(strings.Replace(job.COMPLETE, "% L", "", 1), 64)
-		if (completion_perc >= 95.0) {
+		completion_perc, _ := strconv.ParseFloat(strings.Replace(job.COMPLETE, "% L", "", 1), 64)
+		if completion_perc >= 95.0 {
 			(*job_table) = danger_alert((*job_table), db, id, "nearly at time limit")
 		} else if job.atmemlimit() {
 			(*job_table) = danger_alert((*job_table), db, id, "at memory limit")
@@ -336,21 +328,20 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 	sort.Strings(remaining_run_jobs_list)
 
 	for _, id := range remaining_run_jobs_list {
-		(*job_table).Rows = append((*job_table).Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage(), strings.Replace(db[id].COMPLETE, " L","",1)})
-		(*job_table).RowStyles[(len((*job_table).Rows)-1)] = ui.NewStyle(ColorGrey, ui.ColorClear)
+		(*job_table).Rows = append((*job_table).Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage(), strings.Replace(db[id].COMPLETE, " L", "", 1)})
+		(*job_table).RowStyles[(len((*job_table).Rows) - 1)] = ui.NewStyle(ColorGrey, ui.ColorClear)
 	}
 	for _, id := range exit_jobs_list {
 		(*job_table).Rows = append((*job_table).Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage(), db[id].EXIT_REASON})
-		(*job_table).RowStyles[(len((*job_table).Rows)-1)] = ui.NewStyle(ColorRed, ui.ColorClear)
+		(*job_table).RowStyles[(len((*job_table).Rows) - 1)] = ui.NewStyle(ColorRed, ui.ColorClear)
 	}
 	for _, id := range done_jobs_list {
 		(*job_table).Rows = append((*job_table).Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, db[id].mem_usage()})
-		(*job_table).RowStyles[(len((*job_table).Rows)-1)] = ui.NewStyle(ColorGreen, ui.ColorClear)
+		(*job_table).RowStyles[(len((*job_table).Rows) - 1)] = ui.NewStyle(ColorGreen, ui.ColorClear)
 	}
 
-
 	if email_on {
-		if ((run_jobs == 0) && ((exit_jobs != 0) || (done_jobs == 0))) {
+		if (run_jobs == 0) && ((exit_jobs != 0) || (done_jobs == 0)) {
 			send_notification_email(projectBool, proj_name)
 			ui.Render(button_grid)
 		}
@@ -364,7 +355,6 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 		email_btn.Text = "Email On All Ending [e] "
 	}
 
-
 	statsGrid(run_jobs, pend_jobs, done_jobs, exit_jobs)
 	ui.Render(*job_table) // display constructed table
 	// if project then show label on refresh screen
@@ -374,11 +364,10 @@ func refreshInterface(db map[string]recStruct, job_table **widgets.Table) {
 }
 
 func danger_alert(table1 *widgets.Table, db map[string]recStruct, id string, alert string) *widgets.Table {
-	table1.Rows = append(table1.Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, "Job is "+alert})
-	table1.RowStyles[(len(table1.Rows)-1)] = ui.NewStyle(ColorAlert, ui.ColorClear, ui.ModifierUnderline)
+	table1.Rows = append(table1.Rows, []string{db[id].JOBID, db[id].STAT, db[id].QUEUE, "Job is " + alert})
+	table1.RowStyles[(len(table1.Rows) - 1)] = ui.NewStyle(ColorAlert, ui.ColorClear, ui.ModifierUnderline)
 	return table1
 }
-
 
 func main() {
 	// initiate default values to be later changed by different user interactions
@@ -388,7 +377,7 @@ func main() {
 	email_on = false
 
 	if len(os.Args) > 2 {
-	fmt.Println("Error more than one argument passed, give zero arguments to select all bjobs or one argument to specify a specific project name")
+		fmt.Println("Error more than one argument passed, give zero arguments to select all bjobs or one argument to specify a specific project name")
 		os.Exit(1)
 	} else if len(os.Args) == 2 {
 		proj_name = os.Args[1]
@@ -396,19 +385,17 @@ func main() {
 	}
 
 	//the white used for the borders is #C0C1C0
-	ColorRed = ui.ColorRed // #EC6067 in my terminal colorscheme
+	ColorRed = ui.ColorRed       // #EC6067 in my terminal colorscheme
 	ColorYellow = ui.ColorYellow // #FDC254
 	ColorBlue = ui.Color(14)
-	ColorGreen = ui.Color(2) // #89C487
-	ColorGrey = ui.Color(248) // #979797
+	ColorGreen = ui.Color(2)   // #89C487
+	ColorGrey = ui.Color(248)  // #979797
 	ColorAlert = ui.Color(203) // #FB454D
 
 	// load config and cached job information
 	usr_home, _ := os.UserHomeDir()
 	usr_home = usr_home + "/.config/better-bjobs/"
 	usr_config := usr_home + proj_name + "savedDatabase.json"
-
-
 
 	// start curses terminal interface
 	if err := ui.Init(); err != nil {
@@ -432,10 +419,8 @@ func main() {
 		}
 		project_name_label.Text = proj_name
 		project_name_label.TextStyle.Fg = ColorBlue
-		project_name_label.SetRect((termWidth-proj_n_len-2), termHeight-6, termWidth+1, termHeight-3)
+		project_name_label.SetRect((termWidth - proj_n_len - 2), termHeight-6, termWidth+1, termHeight-3)
 	}
-
-
 
 	// set statusline to be same location as buttons
 	// so as to hide the buttons when we display a status
@@ -445,10 +430,8 @@ func main() {
 	statusline.Border = false
 	statusline_grid.Set(ui.NewRow(1.0/1.0, statusline))
 
-
 	// load config with previous session data
 	db := readSavedDatabase(usr_config)
-
 
 	// Make grid layout for the buttons
 	// on the bottom of the screen
@@ -476,13 +459,11 @@ func main() {
 	clear_btn.TextStyle.Fg = ColorGrey
 
 	button_grid.Set(ui.NewRow(1.0/1.0,
-				ui.NewCol(1.0/4, quit_btn),
-				ui.NewCol(1.0/4, email_btn),
-				ui.NewCol(1.0/4, killall_btn),
-				ui.NewCol(1.0/4, clear_btn)))
+		ui.NewCol(1.0/4, quit_btn),
+		ui.NewCol(1.0/4, email_btn),
+		ui.NewCol(1.0/4, killall_btn),
+		ui.NewCol(1.0/4, clear_btn)))
 	ui.Render(button_grid)
-
-
 
 	job_table := widgets.NewTable()
 	job_table.TextAlignment = ui.AlignCenter
@@ -493,7 +474,6 @@ func main() {
 	job_table.RowStyles[0] = ui.NewStyle(ColorYellow, ui.ColorClear, ui.ModifierBold)
 
 	refreshInterface(db, &job_table)
-
 
 	// setup keyboard input to process user actions
 	uiEvents := ui.PollEvents()
@@ -520,19 +500,18 @@ func main() {
 					}
 					ui.Render(button_grid)
 				} else {
-					async_statusline_message("Error: " + "no currently running jobs", 2)
+					async_statusline_message("Error: "+"no currently running jobs", 2)
 				}
 
 			// clear the cache of saved jobs
 			case "c", "<C-l>":
-				statusline.TextStyle.Fg =  ColorYellow
+				statusline.TextStyle.Fg = ColorYellow
 				async_statusline_message("Clearing cached job info", 2)
 
 				// replace savedDatabase with an empty one on pressing clear
 				var emptyDB map[string]recStruct
 				writeDatabase(usr_home, usr_config, emptyDB)
 				refreshInterface(db, &job_table)
-
 
 			// re-render all elements on resizing terminal window
 			case "<Resize>":
@@ -544,7 +523,6 @@ func main() {
 				ui.Render(stats_grid)
 				button_grid.SetRect(0, termHeight-2, termWidth, termHeight+1)
 				ui.Render(button_grid)
-
 
 			// loop over all cached bjob ids killing each one on "k"
 			case "k":
@@ -561,9 +539,8 @@ func main() {
 
 				} else {
 					statusline.TextStyle.Fg = ColorRed
-					async_statusline_message("Error: " + "no currently running jobs", 5)
+					async_statusline_message("Error: "+"no currently running jobs", 5)
 				}
-
 
 			// manage yes and no prompts initiated by other cases
 			case "n":
@@ -591,10 +568,9 @@ func main() {
 				}
 
 			}
-			case <-ticker:
-				refreshInterface(db, &job_table)
+		case <-ticker:
+			refreshInterface(db, &job_table)
 		}
 	}
 
 }
-
