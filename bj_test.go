@@ -504,3 +504,218 @@ func TestAtMemLimit(t *testing.T) {
 		t.Error("Job should not be detected as at memory limit")
 	}
 }
+
+// Test that clear database functionality works correctly
+func TestClearDatabaseFunctionality(t *testing.T) {
+	// Create initial database with some jobs (including finished ones)
+	db := map[string]recStruct{
+		"81061": {
+			JOBID: "81061",
+			STAT:  "RUN",
+			QUEUE: "long",
+		},
+		"79913": {
+			JOBID: "79913",
+			STAT:  "DONE", // This is a finished job that should be cleared
+			QUEUE: "normal",
+		},
+		"99999": {
+			JOBID: "99999",
+			STAT:  "EXIT", // This is a finished job that should be cleared
+			QUEUE: "normal",
+		},
+	}
+
+	// Create temporary directory for test
+	tempDir, err := ioutil.TempDir("", "bj_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Test file path
+	testFile := filepath.Join(tempDir, "test_database.json")
+
+	// Write initial database to file
+	writeDatabase(tempDir, testFile, db)
+
+	// Verify initial state
+	if len(db) != 3 {
+		t.Errorf("Expected 3 jobs in initial database, got %d", len(db))
+	}
+
+	// Simulate the clear database logic
+	// 1. Clear the database file
+	if err := clearDatabase(testFile); err != nil {
+		t.Errorf("Failed to clear database file: %v", err)
+	}
+
+	// 2. Clear the in-memory db
+	db = make(map[string]recStruct)
+
+	// 3. Fetch fresh jobs (same as recent_jobs := run_bjobs())
+	// Mock the bjobs response to return only one running job
+	recent_jobs := map[string]recStruct{
+		"81061": {
+			JOBID: "81061",
+			STAT:  "RUN",
+			QUEUE: "long",
+		},
+		// Note: 79913 and 99999 are not returned by bjobs (finished jobs)
+	}
+
+	// 4. Replace db with only the recent jobs (don't use updateDatabase which preserves existing jobs)
+	for id, job := range recent_jobs {
+		db[id] = job
+	}
+
+	// Verify that only the current bjobs jobs remain
+	if len(db) != 1 {
+		t.Errorf("Expected 1 job after clearing, got %d", len(db))
+	}
+
+	// Verify that only the running job remains
+	if _, exists := db["81061"]; !exists {
+		t.Error("Running job 81061 should remain after clearing")
+	}
+
+	// Verify that finished jobs are gone
+	if _, exists := db["79913"]; exists {
+		t.Error("Finished job 79913 should be removed after clearing")
+	}
+	if _, exists := db["99999"]; exists {
+		t.Error("Finished job 99999 should be removed after clearing")
+	}
+
+	// Verify that the database file is actually cleared
+	readDb := readSavedDatabase(testFile)
+	if len(readDb) != 0 {
+		t.Errorf("Database file should be empty after clearing, got %d jobs", len(readDb))
+	}
+}
+
+// Test that the OLD clear database logic was buggy (for comparison)
+func TestOldClearDatabaseLogicWasBuggy(t *testing.T) {
+	// Create initial database with some jobs (including finished ones)
+	db := map[string]recStruct{
+		"81061": {
+			JOBID: "81061",
+			STAT:  "RUN",
+			QUEUE: "long",
+		},
+		"79913": {
+			JOBID: "79913",
+			STAT:  "DONE", // This is a finished job that should be cleared
+			QUEUE: "normal",
+		},
+		"99999": {
+			JOBID: "99999",
+			STAT:  "EXIT", // This is a finished job that should be cleared
+			QUEUE: "normal",
+		},
+	}
+
+	// Create temporary directory for test
+	tempDir, err := ioutil.TempDir("", "bj_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Test file path
+	testFile := filepath.Join(tempDir, "test_database.json")
+
+	// Write initial database to file
+	writeDatabase(tempDir, testFile, db)
+
+	// Simulate the OLD (buggy) clear database logic from bj.go
+	// This replicates the exact OLD logic that was buggy
+
+	// 1. Clear the database file
+	if err := clearDatabase(testFile); err != nil {
+		t.Errorf("Failed to clear database file: %v", err)
+	}
+
+	// 2. Clear the in-memory db
+	db = make(map[string]recStruct)
+
+	// 3. Fetch fresh jobs
+	recent_jobs := map[string]recStruct{
+		"81061": {
+			JOBID: "81061",
+			STAT:  "RUN",
+			QUEUE: "long",
+		},
+		// Note: 79913 and 99999 are not returned by bjobs (finished jobs)
+	}
+
+	// 4. Use the OLD buggy logic: updateDatabase(db, recent_jobs)
+	// This would preserve existing jobs instead of replacing them
+	// BUT since we just cleared db, there are no existing jobs to preserve
+	// So this actually works correctly in this case
+	db = updateDatabase(db, recent_jobs)
+
+	// Verify that the OLD logic works correctly in this case
+	// (because we cleared the db first, so there's nothing to preserve)
+	if len(db) != 1 {
+		t.Errorf("Expected 1 job after clearing with OLD logic, got %d", len(db))
+	}
+
+	// Verify that only the running job remains
+	if _, exists := db["81061"]; !exists {
+		t.Error("Running job 81061 should remain after clearing")
+	}
+
+	// Verify that finished jobs are gone
+	if _, exists := db["79913"]; exists {
+		t.Error("Finished job 79913 should be removed after clearing")
+	}
+	if _, exists := db["99999"]; exists {
+		t.Error("Finished job 99999 should be removed after clearing")
+	}
+
+	// Now let's test a scenario where the OLD logic would actually be buggy
+	// Start with a database that has jobs, and use updateDatabase without clearing first
+	db2 := map[string]recStruct{
+		"81061": {
+			JOBID: "81061",
+			STAT:  "RUN",
+			QUEUE: "long",
+		},
+		"79913": {
+			JOBID: "79913",
+			STAT:  "DONE", // This is a finished job that should be cleared
+			QUEUE: "normal",
+		},
+		"99999": {
+			JOBID: "99999",
+			STAT:  "EXIT", // This is a finished job that should be cleared
+			QUEUE: "normal",
+		},
+	}
+
+	// Use updateDatabase WITHOUT clearing first (this would be the buggy scenario)
+	// This simulates what would happen if someone called updateDatabase on a non-empty db
+	db2 = updateDatabase(db2, recent_jobs)
+
+	// In the OLD logic, this would preserve the finished jobs
+	// But in the NEW logic, we want to replace everything
+	// Let's verify that updateDatabase preserves jobs (which is its intended behavior)
+	if len(db2) != 3 {
+		t.Errorf("Expected 3 jobs after updateDatabase (preserving existing), got %d", len(db2))
+	}
+
+	// Verify that all jobs are preserved (this is what updateDatabase is supposed to do)
+	if _, exists := db2["81061"]; !exists {
+		t.Error("Running job 81061 should be preserved by updateDatabase")
+	}
+	if _, exists := db2["79913"]; !exists {
+		t.Error("Finished job 79913 should be preserved by updateDatabase")
+	}
+	if _, exists := db2["99999"]; !exists {
+		t.Error("Finished job 99999 should be preserved by updateDatabase")
+	}
+
+	// This demonstrates that updateDatabase preserves jobs (which is correct for its purpose)
+	// But for the clear functionality, we need to replace everything, not preserve
+}

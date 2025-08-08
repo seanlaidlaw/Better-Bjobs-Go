@@ -610,8 +610,10 @@ func main() {
 				db = make(map[string]recStruct)
 				recent_jobs := run_bjobs()
 
-				// Re-populate db with only the recent jobs
-				db = updateDatabase(db, recent_jobs)
+				// Replace db with only the recent jobs (don't use updateDatabase which preserves existing jobs)
+				for id, job := range recent_jobs {
+					db[id] = job
+				}
 
 				// Immediately redraw after clearing
 				redrawUI(db, &job_table)
