@@ -580,7 +580,7 @@ func main() {
 				return
 
 			case "e":
-				if run_jobs > 0 {
+				if run_jobs > 0 || pend_jobs > 0 {
 					email_on = !email_on
 					if email_on {
 						email_btn.TextStyle.Fg = ColorGreen
@@ -592,7 +592,7 @@ func main() {
 					ui.Render(button_grid) // Immediately render the button grid
 					redrawUI(db, &job_table)
 				} else {
-					async_statusline_message("Error: no currently running jobs", 2)
+					async_statusline_message("Error: no active jobs (running or pending)", 2)
 				}
 
 			// clear the cache of saved jobs
@@ -626,7 +626,7 @@ func main() {
 				redrawUI(db, &job_table)
 
 			case "k":
-				if run_jobs > 0 {
+				if run_jobs > 0 || pend_jobs > 0 {
 					// specify that only project ids will be killed if we have a project subview
 					projectText := ""
 					if projectBool {
@@ -639,7 +639,7 @@ func main() {
 					redrawUI(db, &job_table)
 				} else {
 					statusline.TextStyle.Fg = ColorRed
-					async_statusline_message("Error: no currently running jobs", 5)
+					async_statusline_message("Error: no active jobs (running or pending)", 5)
 				}
 
 			// manage yes and no prompts initiated by other cases

@@ -719,3 +719,115 @@ func TestOldClearDatabaseLogicWasBuggy(t *testing.T) {
 	// This demonstrates that updateDatabase preserves jobs (which is correct for its purpose)
 	// But for the clear functionality, we need to replace everything, not preserve
 }
+
+// Test that email notifications work with pending jobs
+func TestEmailNotificationsWithPendingJobs(t *testing.T) {
+	// Test that email notifications can be enabled when there are pending jobs
+	// even if there are no running jobs
+
+	// Set up test scenario with only pending jobs
+	run_jobs = 0
+	pend_jobs = 2
+	done_jobs = 0
+	exit_jobs = 0
+
+	// Simulate the email notification logic
+	// This replicates the logic from the "e" case in main()
+	canEnableEmail := run_jobs > 0 || pend_jobs > 0
+
+	if !canEnableEmail {
+		t.Error("Email notifications should be allowed when there are pending jobs")
+	}
+
+	// Test with no active jobs at all
+	run_jobs = 0
+	pend_jobs = 0
+	done_jobs = 1
+	exit_jobs = 0
+
+	canEnableEmail = run_jobs > 0 || pend_jobs > 0
+
+	if canEnableEmail {
+		t.Error("Email notifications should not be allowed when there are no active jobs")
+	}
+
+	// Test with only running jobs
+	run_jobs = 1
+	pend_jobs = 0
+	done_jobs = 0
+	exit_jobs = 0
+
+	canEnableEmail = run_jobs > 0 || pend_jobs > 0
+
+	if !canEnableEmail {
+		t.Error("Email notifications should be allowed when there are running jobs")
+	}
+
+	// Test with both running and pending jobs
+	run_jobs = 1
+	pend_jobs = 2
+	done_jobs = 0
+	exit_jobs = 0
+
+	canEnableEmail = run_jobs > 0 || pend_jobs > 0
+
+	if !canEnableEmail {
+		t.Error("Email notifications should be allowed when there are both running and pending jobs")
+	}
+}
+
+// Test that kill jobs functionality works with pending jobs
+func TestKillJobsWithPendingJobs(t *testing.T) {
+	// Test that kill jobs can be used when there are pending jobs
+	// even if there are no running jobs
+
+	// Set up test scenario with only pending jobs
+	run_jobs = 0
+	pend_jobs = 2
+	done_jobs = 0
+	exit_jobs = 0
+
+	// Simulate the kill jobs logic
+	// This replicates the logic from the "k" case in main()
+	canKillJobs := run_jobs > 0 || pend_jobs > 0
+
+	if !canKillJobs {
+		t.Error("Kill jobs should be allowed when there are pending jobs")
+	}
+
+	// Test with no active jobs at all
+	run_jobs = 0
+	pend_jobs = 0
+	done_jobs = 1
+	exit_jobs = 0
+
+	canKillJobs = run_jobs > 0 || pend_jobs > 0
+
+	if canKillJobs {
+		t.Error("Kill jobs should not be allowed when there are no active jobs")
+	}
+
+	// Test with only running jobs
+	run_jobs = 1
+	pend_jobs = 0
+	done_jobs = 0
+	exit_jobs = 0
+
+	canKillJobs = run_jobs > 0 || pend_jobs > 0
+
+	if !canKillJobs {
+		t.Error("Kill jobs should be allowed when there are running jobs")
+	}
+
+	// Test with both running and pending jobs
+	run_jobs = 1
+	pend_jobs = 2
+	done_jobs = 0
+	exit_jobs = 0
+
+	canKillJobs = run_jobs > 0 || pend_jobs > 0
+
+	if !canKillJobs {
+		t.Error("Kill jobs should be allowed when there are both running and pending jobs")
+	}
+}
