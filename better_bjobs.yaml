@@ -1,0 +1,13 @@
+name: better_bjobs
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - go==1.22.3
+  - nvim
+  - nodejs
+  - eza
+  - ca-certificates
+  - openssl
+prefix: /software/conda/users/sl31/better_bjobs

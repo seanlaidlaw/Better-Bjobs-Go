@@ -290,7 +290,7 @@ func updateJobs(db map[string]recStruct) (map[string]recStruct, bool) {
 	// Assume no changes initially
 	jobsChanged := false
 
-	// Iterate through all jobs from bjobs_map
+	// Iterate through all jobs from bjobs_map (currently active jobs)
 	for id, new_job := range bjobs_map {
 		// Check if the job exists in the current database
 		if old_job, exists := db[id]; exists {
@@ -310,14 +310,9 @@ func updateJobs(db map[string]recStruct) (map[string]recStruct, bool) {
 		}
 	}
 
-	// Now, check if any jobs were removed (i.e., present in `db` but not in `bjobs_map`)
-	for id := range db {
-		if _, exists := bjobs_map[id]; !exists {
-			// Job was removed
-			jobsChanged = true
-			delete(db, id) // Remove job from db
-		}
-	}
+	// IMPORTANT: Preserve jobs that are no longer returned by bjobs command
+	// These are typically finished jobs (DONE/EXIT) that should remain in the database
+	// We don't remove any jobs from the database - they stay until manually cleared
 
 	// Set job counts after updating the job data
 	new_run_jobs := 0
@@ -677,6 +672,8 @@ func main() {
 			// Periodically update the jobs and redraw only if needed
 			db, jobsChanged := updateJobs(db)
 			if jobsChanged {
+				// Write database to disk to persist changes
+				writeDatabase(usr_home, usr_config, db)
 				redrawUI(db, &job_table)
 			}
 		}

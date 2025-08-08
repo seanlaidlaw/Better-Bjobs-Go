@@ -1,0 +1,36 @@
+{
+  "COMMAND": "bjobs",
+  "JOBS": 2,
+  "RECORDS": [
+    {
+      "JOBID": "81061",
+      "STAT": "DONE",
+      "QUEUE": "long",
+      "KILL_REASON": "",
+      "DEPENDENCY": "",
+      "EXIT_REASON": "",
+      "TIME_LEFT": "47:51 L",
+      "%COMPLETE": "0.29% L",
+      "RUN_TIME": "495 second(s)",
+      "MAX_MEM": "80.5 Gbytes",
+      "MEMLIMIT": "293 G",
+      "NTHREADS": "24",
+      "EXIT_CODE": ""
+    },
+    {
+      "JOBID": "79913",
+      "STAT": "DONE",
+      "QUEUE": "normal",
+      "KILL_REASON": "",
+      "DEPENDENCY": "",
+      "EXIT_REASON": "",
+      "TIME_LEFT": "11:49 L",
+      "%COMPLETE": "1.51% L",
+      "RUN_TIME": "654 second(s)",
+      "MAX_MEM": "59 Gbytes",
+      "MEMLIMIT": "488 G",
+      "NTHREADS": "6",
+      "EXIT_CODE": ""
+    }
+  ]
+}
